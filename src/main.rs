@@ -25,6 +25,7 @@ use tracing_subscriber::{
     FmtSubscriber,
 };
 
+mod handlers;
 // mod commands;
 
 pub struct ShardManagerContainer;
@@ -41,14 +42,14 @@ impl TypeMapKey for WRocksDb {
 
 struct MiniAttachment {
     url: String,
-    msg_id: MessageId,
+    msg: Message,
     filename: String,
 }
 
 impl MiniAttachment {
-    pub fn from_attachment(msg_id: MessageId, att: Attachment) -> Self {
+    pub fn from_attachment(msg: Message, att: Attachment) -> Self {
         MiniAttachment {
-            msg_id,
+            msg,
             url: att.url,
             filename: att.filename,
         }
@@ -72,44 +73,7 @@ enum AttachmentStatus {
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        if msg.attachments.len() > 0 {
-            let db_lock = {
-                let reader = ctx.data.read().await;
-
-                reader.get::<WRocksDb>().expect("Db instance gone").clone()
-            };
-
-            let db = db_lock.lock().await;
-            let guild_id = msg.guild_id.unwrap();
-
-            for att in &msg.attachments {
-                // Store, that attachment(s) has been added to processing queue
-                {
-                    let key_prefix = format!("guild({}):attachment({})", guild_id, att.id).into_bytes();
-
-                    db.put(&*key_prefix, b"0");
-
-                    debug!("added {} to db with status pending", att.url);
-                }
-
-                // Push mini notification to queue, so another process can take it
-                {
-                    let queue_lock = {
-                        let reader = ctx.data.read().await;
-
-                        reader.get::<ProcessingQueue>().expect("ProcessingQueue instance gone").clone()
-                    };
-
-                    let mut queue = queue_lock.write().await;
-
-                    queue.push_back(MiniAttachment::from_attachment(msg.id.to_owned(), att.to_owned()));
-
-                    debug!("added {} to queue", att.url);
-                }
-
-                msg.react(ctx.http.clone(), ReactionType::Unicode("⏲️".to_string())).await;
-            }
-        }
+        handlers::message::handle(self, ctx, msg);
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
@@ -124,6 +88,9 @@ impl EventHandler for Handler {
 // #[group]
 // #[commands(multiply, ping, quit)]
 // struct General;
+
+const MAGNET_REACTION: ReactionType = ReactionType::Unicode("🧲".to_string());
+const CLOCK_REACTION: ReactionType = ReactionType::Unicode("⏲️".to_string());
 
 #[tokio::main]
 async fn main() {
@@ -161,6 +128,9 @@ async fn main() {
     let framework = StandardFramework::new()
         .configure(|c| c
             .owners(owners)
+            .allow_dm(false)
+            .ignore_bots(true)
+            .ignore_webhooks(true)
             .prefix(";"));
     // .group(&GENERAL_GROUP);
 
@@ -196,10 +166,9 @@ async fn main() {
     }
 
     let new_data = client.data.clone();
+    let cache_http = client.cache_and_http.http.clone();
 
     let handle = tokio::task::spawn(async move {
-        println!("hello from thread");
-
         let mut data = new_data.read().await;
 
         let queue_lock = {
@@ -209,12 +178,11 @@ async fn main() {
         loop {
             let mut queue = queue_lock.write().await;
 
-            println!("checking queue");
-
             while !queue.is_empty() {
                 let att = queue.pop_back().unwrap();
+                att.msg.delete_reaction_emoji(cache_http.clone(), CLOCK_REACTION).await;
 
-                println!("got attachment {}", &att.filename);
+                debug!("got attachment {}", &att.filename);
 
                 let blob = reqwest::get(&att.url)
                     .await.unwrap()
@@ -223,14 +191,12 @@ async fn main() {
 
                 fs::write(format!("/tmp/{}", &att.filename), blob).unwrap();
 
-                info!("file written {}", &att.filename)
+                att.msg.react(cache_http.clone(), MAGNET_REACTION).await;
+
+                debug!("file written {}", &att.filename)
             }
 
-            println!("queue empty");
-
-            debug!("sleeping");
-
-            thread::sleep(Duration::from_secs(1));
+            tokio::time::sleep(Duration::from_millis(1000)).await;
         };
     });
 
