@@ -25,8 +25,12 @@ use tracing_subscriber::{
     EnvFilter,
     FmtSubscriber,
 };
+use crate::db::WRocksDb;
+use crate::processing_queue::ProcessingQueue;
+use crate::mini_attachment::MiniAttachment;
+use crate::reactions::clock_reaction;
 
-pub async fn handle(x: &impl EventHandler, ctx: Context, msg: Message) {
+pub async fn handle(_: &impl EventHandler, ctx: Context, msg: Message) {
     if !msg.is_private() && msg.attachments.len() > 0 {
         let db_lock = {
             let reader = ctx.data.read().await;
@@ -62,7 +66,7 @@ pub async fn handle(x: &impl EventHandler, ctx: Context, msg: Message) {
                 debug!("added {} to queue", att.url);
             }
 
-            msg.react(ctx.http.clone(), ReactionType::Unicode("⏲️".to_string())).await;
+            msg.react(ctx.http.clone(), clock_reaction()).await;
         }
     }
 }

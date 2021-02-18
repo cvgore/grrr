@@ -25,7 +25,17 @@ use tracing_subscriber::{
     FmtSubscriber,
 };
 
+use db::WRocksDb;
+use processing_queue::ProcessingQueue;
+use crate::mini_attachment::MiniAttachment;
+use crate::reactions::{clock_reaction, magnet_reaction};
+
 mod handlers;
+mod db;
+mod processing_queue;
+mod mini_attachment;
+mod reactions;
+
 // mod commands;
 
 pub struct ShardManagerContainer;
@@ -34,29 +44,9 @@ impl TypeMapKey for ShardManagerContainer {
     type Value = Arc<Mutex<ShardManager>>;
 }
 
-struct WRocksDb;
-
 impl TypeMapKey for WRocksDb {
     type Value = Arc<Mutex<rocksdb::DB>>;
 }
-
-struct MiniAttachment {
-    url: String,
-    msg: Message,
-    filename: String,
-}
-
-impl MiniAttachment {
-    pub fn from_attachment(msg: Message, att: Attachment) -> Self {
-        MiniAttachment {
-            msg,
-            url: att.url,
-            filename: att.filename,
-        }
-    }
-}
-
-struct ProcessingQueue;
 
 impl TypeMapKey for ProcessingQueue {
     type Value = Arc<RwLock<VecDeque<MiniAttachment>>>;
@@ -73,7 +63,7 @@ enum AttachmentStatus {
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        handlers::message::handle(self, ctx, msg);
+        handlers::message::handle(self, ctx, msg).await;
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
@@ -88,9 +78,6 @@ impl EventHandler for Handler {
 // #[group]
 // #[commands(multiply, ping, quit)]
 // struct General;
-
-const MAGNET_REACTION: ReactionType = ReactionType::Unicode("🧲".to_string());
-const CLOCK_REACTION: ReactionType = ReactionType::Unicode("⏲️".to_string());
 
 #[tokio::main]
 async fn main() {
@@ -128,9 +115,9 @@ async fn main() {
     let framework = StandardFramework::new()
         .configure(|c| c
             .owners(owners)
-            .allow_dm(false)
-            .ignore_bots(true)
-            .ignore_webhooks(true)
+            // .allow_dm(false)
+            // .ignore_bots(true)
+            // .ignore_webhooks(true)
             .prefix(";"));
     // .group(&GENERAL_GROUP);
 
@@ -180,7 +167,7 @@ async fn main() {
 
             while !queue.is_empty() {
                 let att = queue.pop_back().unwrap();
-                att.msg.delete_reaction_emoji(cache_http.clone(), CLOCK_REACTION).await;
+                att.msg.delete_reaction_emoji(cache_http.clone(), clock_reaction()).await;
 
                 debug!("got attachment {}", &att.filename);
 
@@ -191,7 +178,7 @@ async fn main() {
 
                 fs::write(format!("/tmp/{}", &att.filename), blob).unwrap();
 
-                att.msg.react(cache_http.clone(), MAGNET_REACTION).await;
+                att.msg.react(cache_http.clone(), magnet_reaction()).await;
 
                 debug!("file written {}", &att.filename)
             }
