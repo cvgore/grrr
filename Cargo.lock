@@ -472,6 +472,8 @@ dependencies = [
  "dotenv",
  "reqwest",
  "rocksdb",
+ "serde",
+ "serde_json",
  "serenity",
  "tokio",
  "tracing",

@@ -18,8 +18,8 @@ use serenity::client::bridge::gateway::GatewayIntents;
 use serenity::model::channel::{Attachment, Message, Reaction, ReactionType};
 use serenity::model::id::{GuildId, MessageId};
 use serenity::static_assertions::_core::time::Duration;
+use tokio::sync::Notify;
 use tracing::{debug, error, info};
-use tracing::field::debug;
 use tracing_subscriber::{
     EnvFilter,
     FmtSubscriber,
@@ -27,18 +27,26 @@ use tracing_subscriber::{
 
 use db::WRocksDb;
 use processing_queue::ProcessingQueue;
-use crate::mini_attachment::MiniAttachment;
+
+use crate::queue_entry::QueueEntry;
 use crate::reactions::{clock_reaction, magnet_reaction};
 
 mod handlers;
 mod db;
 mod processing_queue;
-mod mini_attachment;
+mod queue_entry;
 mod reactions;
+mod uploader;
 
 // mod commands;
 
 pub struct ShardManagerContainer;
+
+struct UploadNotif;
+
+impl TypeMapKey for UploadNotif {
+    type Value = Arc<Notify>;
+}
 
 impl TypeMapKey for ShardManagerContainer {
     type Value = Arc<Mutex<ShardManager>>;
@@ -49,7 +57,7 @@ impl TypeMapKey for WRocksDb {
 }
 
 impl TypeMapKey for ProcessingQueue {
-    type Value = Arc<RwLock<VecDeque<MiniAttachment>>>;
+    type Value = Arc<RwLock<VecDeque<QueueEntry>>>;
 }
 
 struct Handler;
@@ -92,12 +100,14 @@ async fn main() {
     let token = env::var("DISCORD_TOKEN")
         .expect("Expected a token in the environ");
 
-    let shard_count = {
-        let count = env::var("SHARD_COUNT")
-            .expect("Expected a shard count in the environ");
+    if false {
+        let _shard_count = {
+            let count = env::var("SHARD_COUNT")
+                .expect("Expected a shard count in the environ");
 
-        count.parse::<u64>().expect("Expected shard count as a integer")
-    };
+            count.parse::<u64>().expect("Expected shard count as a integer")
+        };
+    }
 
     let http = Http::new_with_token(&token);
 
@@ -115,9 +125,6 @@ async fn main() {
     let framework = StandardFramework::new()
         .configure(|c| c
             .owners(owners)
-            // .allow_dm(false)
-            // .ignore_bots(true)
-            // .ignore_webhooks(true)
             .prefix(";"));
     // .group(&GENERAL_GROUP);
 
@@ -125,7 +132,6 @@ async fn main() {
         .framework(framework)
         .intents(
             GatewayIntents::GUILD_MESSAGES
-                | GatewayIntents::GUILDS
                 | GatewayIntents::GUILD_MESSAGE_REACTIONS
         )
         .event_handler(Handler)
@@ -152,40 +158,30 @@ async fn main() {
         data.insert::<ProcessingQueue>(Arc::new(RwLock::new(VecDeque::new())));
     }
 
-    let new_data = client.data.clone();
-    let cache_http = client.cache_and_http.http.clone();
+    let upload_notif = Arc::new(Notify::new());
 
-    let handle = tokio::task::spawn(async move {
-        let mut data = new_data.read().await;
+    {
+        let mut data = client.data.write().await;
+        data.insert::<UploadNotif>(upload_notif.clone());
+    }
 
-        let queue_lock = {
-            data.get::<ProcessingQueue>().unwrap().clone()
-        };
+    let handle = {
+        let data = client.data.clone();
+        let discord_http = client.cache_and_http.http.clone();
+        let rclone_http = Arc::new(reqwest::Client::new());
 
-        loop {
-            let mut queue = queue_lock.write().await;
+        tokio::spawn(async move {
+            loop {
+                upload_notif.notified().await;
 
-            while !queue.is_empty() {
-                let att = queue.pop_back().unwrap();
-                att.msg.delete_reaction_emoji(cache_http.clone(), clock_reaction()).await;
-
-                debug!("got attachment {}", &att.filename);
-
-                let blob = reqwest::get(&att.url)
-                    .await.unwrap()
-                    .bytes()
-                    .await.unwrap();
-
-                fs::write(format!("/tmp/{}", &att.filename), blob).unwrap();
-
-                att.msg.react(cache_http.clone(), magnet_reaction()).await;
-
-                debug!("file written {}", &att.filename)
+                uploader::process_queue(
+                    data.clone(),
+                    discord_http.clone(),
+                    rclone_http.clone(),
+                ).await;
             }
-
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-        };
-    });
+        })
+    };
 
     let shard_manager = client.shard_manager.clone();
 
@@ -195,7 +191,7 @@ async fn main() {
         handle.abort();
     });
 
-    if let Err(why) = client.start_shards(shard_count).await {
+    if let Err(why) = client.start_autosharded().await {
         error!("Client error: {:?}", why);
     }
 }

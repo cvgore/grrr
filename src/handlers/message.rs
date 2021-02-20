@@ -25,17 +25,22 @@ use tracing_subscriber::{
     EnvFilter,
     FmtSubscriber,
 };
+
 use crate::db::WRocksDb;
 use crate::processing_queue::ProcessingQueue;
-use crate::mini_attachment::MiniAttachment;
+use crate::queue_entry::QueueEntry;
 use crate::reactions::clock_reaction;
+use crate::UploadNotif;
 
 pub async fn handle(_: &impl EventHandler, ctx: Context, msg: Message) {
     if !msg.is_private() && msg.attachments.len() > 0 {
-        let db_lock = {
+        let (db_lock, upload_notif) = {
             let reader = ctx.data.read().await;
 
-            reader.get::<WRocksDb>().expect("Db instance gone").clone()
+            (
+                reader.get::<WRocksDb>().expect("Db instance gone").clone(),
+                reader.get::<UploadNotif>().expect("upload notif gone").clone()
+            )
         };
 
         let db = db_lock.lock().await;
@@ -61,12 +66,16 @@ pub async fn handle(_: &impl EventHandler, ctx: Context, msg: Message) {
 
                 let mut queue = queue_lock.write().await;
 
-                queue.push_back(MiniAttachment::from_attachment(msg.clone(), att.clone()));
+                queue.push_back(QueueEntry::from_gateway(&msg, att.clone()));
 
                 debug!("added {} to queue", att.url);
             }
 
-            msg.react(ctx.http.clone(), clock_reaction()).await;
+            if false {
+                msg.react(ctx.http.clone(), clock_reaction()).await;
+            }
         }
+
+        upload_notif.notify_one();
     }
 }
