@@ -66,7 +66,23 @@ pub async fn handle(_: &impl EventHandler, ctx: Context, msg: Message) {
 
                 let mut queue = queue_lock.write().await;
 
-                queue.push_back(QueueEntry::from_gateway(&msg, att.clone()));
+                let guild_chan = {
+                    match msg.channel(ctx.cache.clone()).await {
+                        Some(chan) => {
+                            debug!("got guild 1");
+                            chan.guild()
+                        }
+                        _ => None,
+                    }
+                };
+
+                if guild_chan.is_some() {
+                    debug!("got guild 2")
+                } else {
+                    debug!("guild missing");
+                }
+
+                queue.push_back(QueueEntry::from_gateway(&msg, att.clone(), guild_chan));
 
                 debug!("added {} to queue", att.url);
             }

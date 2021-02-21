@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::{collections::HashSet, env, sync::Arc, thread};
 use std::collections::VecDeque;
 use std::fs;
@@ -70,6 +73,10 @@ enum AttachmentStatus {
 
 #[async_trait]
 impl EventHandler for Handler {
+    async fn cache_ready(&self, _: Context, guilds: Vec<GuildId>) {
+        info!("Cache ready, {} guilds", guilds.len());
+    }
+
     async fn message(&self, ctx: Context, msg: Message) {
         handlers::message::handle(self, ctx, msg).await;
     }
@@ -133,6 +140,7 @@ async fn main() {
         .intents(
             GatewayIntents::GUILD_MESSAGES
                 | GatewayIntents::GUILD_MESSAGE_REACTIONS
+                | GatewayIntents::GUILDS
         )
         .event_handler(Handler)
         .await
