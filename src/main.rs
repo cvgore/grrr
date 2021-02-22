@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 use std::fs;
 
 use reqwest;
+use rocksdb::Options;
 use serenity::{
     async_trait,
     client::bridge::gateway::ShardManager,
@@ -19,6 +20,7 @@ use serenity::{
 };
 use serenity::client::bridge::gateway::GatewayIntents;
 use serenity::model::channel::{Attachment, Message, Reaction, ReactionType};
+use serenity::model::guild::Guild;
 use serenity::model::id::{GuildId, MessageId};
 use serenity::static_assertions::_core::time::Duration;
 use tokio::sync::Notify;
@@ -40,6 +42,7 @@ mod processing_queue;
 mod queue_entry;
 mod reactions;
 mod uploader;
+mod helpers;
 
 // mod commands;
 
@@ -65,16 +68,14 @@ impl TypeMapKey for ProcessingQueue {
 
 struct Handler;
 
-enum AttachmentStatus {
-    Pending = 0,
-    Processing = 1,
-    Processed = 2,
-}
-
 #[async_trait]
 impl EventHandler for Handler {
-    async fn cache_ready(&self, _: Context, guilds: Vec<GuildId>) {
-        info!("Cache ready, {} guilds", guilds.len());
+    async fn guild_create(&self, _ctx: Context, guild: Guild, is_new: bool) {
+
+    }
+
+    async fn cache_ready(&self, ctx: Context, guilds: Vec<GuildId>) {
+        handlers::cache_ready::handle(self, ctx, guilds).await;
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
@@ -154,8 +155,10 @@ async fn main() {
     let path = "grrr.db";
 
     {
-        let db = rocksdb::DB::open_default(path)
-            .expect(&format!("Couldn't open db file: {}", path));
+        let cf_names = rocksdb::DB::list_cf(&Options::default(), path).expect("Couldn't list all CF");
+
+        let db = rocksdb::DB::open_cf(&Options::default(), path, cf_names)
+            .unwrap_or_else(|| panic!("Couldn't open db file: {}", path));
 
         let mut data = client.data.write().await;
         data.insert::<WRocksDb>(Arc::new(Mutex::new(db)));

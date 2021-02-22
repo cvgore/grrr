@@ -14,7 +14,7 @@ pub struct QueueEntry {
 
 impl QueueEntry {
     pub fn from_gateway(msg: &Message, att: Attachment, chan: Option<GuildChannel>) -> Self {
-        let mut ch_name = {
+        let ch_name = {
             match chan {
                 Some(chan) => Some(chan.name),
                 _ => None,

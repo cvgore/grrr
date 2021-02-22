@@ -31,15 +31,16 @@ use crate::processing_queue::ProcessingQueue;
 use crate::queue_entry::QueueEntry;
 use crate::reactions::clock_reaction;
 use crate::UploadNotif;
+use crate::helpers::AttachmentStatus;
 
 pub async fn handle(_: &impl EventHandler, ctx: Context, msg: Message) {
-    if !msg.is_private() && msg.attachments.len() > 0 {
+    if !msg.is_private() && !msg.attachments.is_empty() {
         let (db_lock, upload_notif) = {
             let reader = ctx.data.read().await;
 
             (
                 reader.get::<WRocksDb>().expect("Db instance gone").clone(),
-                reader.get::<UploadNotif>().expect("upload notif gone").clone()
+                reader.get::<UploadNotif>().expect("upload notif gone").clone(),
             )
         };
 
@@ -49,9 +50,11 @@ pub async fn handle(_: &impl EventHandler, ctx: Context, msg: Message) {
         for att in &msg.attachments {
             // Store, that attachment(s) has been added to processing queue
             {
-                let key_prefix = format!("guild({}):attachment({})", guild_id, att.id).into_bytes();
-
-                db.put(&*key_prefix, b"0");
+                db.put_cf(
+                    db.cf_handle(guild_id.to_db_key()).unwrap(),
+                    att.to_db_key(),
+                    AttachmentStatus::Pending,
+                );
 
                 debug!("added {} to db with status pending", att.url);
             }

@@ -18,13 +18,13 @@ use crate::queue_entry::QueueEntry;
 use crate::reactions::{clock_reaction, magnet_reaction};
 
 pub async fn process_queue(data_lock: Arc<RwLock<TypeMap>>, discord_http: Arc<Http>, rclone_http: Arc<Client>) {
-    let queue_lock = {
-        let mut data = data_lock.read().await;
-
-        data.get::<ProcessingQueue>().unwrap().clone()
-    };
-
     while let Some(entry) = {
+        let queue_lock = {
+            let data = data_lock.read().await;
+
+            data.get::<ProcessingQueue>().unwrap().clone()
+        };
+
         let mut queue = queue_lock.write().await;
 
         queue.pop_back()
@@ -78,27 +78,33 @@ pub async fn process_file(entry: &QueueEntry, db_lock: Arc<Mutex<rocksdb::DB>>, 
         .json(&document)
         .send()
         .await.unwrap();
+
+    db.put_cf()
 }
 
 async fn get_drive_file_path(entry: &QueueEntry) -> String {
-    lazy_static! {
-        static ref FNAME_REGEXP: Regex = Regex::new(r#"[\w, ()-]"#).unwrap();
-    }
-
     let mut path = String::new();
 
     if let Some(mut ch_name) = entry.ch_name.clone() {
-        ch_name.retain(|c| FNAME_REGEXP.is_match(&c.to_string()));
+        ch_name.retain(cleanup_char);
 
-        debug!("filtered chan name: {}", ch_name);
+        debug!("filtered chan name: {}", &ch_name);
 
         path.push_str(&ch_name);
         path.push('/');
+    } else {
+        path.push_str("unknown_channel/")
     }
 
-    let fname = format!("{}_{}", entry.att_id, entry.fname);
+    let mut fname = entry.fname.clone();
+    fname.retain(cleanup_char);
+    let fname = format!("{}_{}", &entry.att_id, &fname);
 
     path.push_str(&fname);
 
     path
+}
+
+fn cleanup_char(c: char) -> bool {
+    char::is_alphabetic(c) || char::is_digit(c, 10) || ", ()-[]{};?".contains(c)
 }
