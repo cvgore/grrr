@@ -70,12 +70,12 @@ struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn guild_create(&self, _ctx: Context, guild: Guild, is_new: bool) {
-
-    }
-
     async fn cache_ready(&self, ctx: Context, guilds: Vec<GuildId>) {
         handlers::cache_ready::handle(self, ctx, guilds).await;
+    }
+
+    async fn guild_create(&self, _ctx: Context, guild: Guild, is_new: bool) {
+        handlers::guild_create::handle(self, ctx, guild, is_new).await;
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
@@ -176,7 +176,7 @@ async fn main() {
         data.insert::<UploadNotif>(upload_notif.clone());
     }
 
-    let handle = {
+    let h_uploader = {
         let data = client.data.clone();
         let discord_http = client.cache_and_http.http.clone();
         let rclone_http = Arc::new(reqwest::Client::new());
@@ -199,7 +199,7 @@ async fn main() {
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.expect("Could not register ^c handler");
         shard_manager.lock().await.shutdown_all().await;
-        handle.abort();
+        h_uploader.abort();
     });
 
     if let Err(why) = client.start_autosharded().await {

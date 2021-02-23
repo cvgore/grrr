@@ -1,7 +1,12 @@
 use serenity::model::channel::Attachment;
-use serenity::model::id::GuildId;
+use serenity::model::id::{AttachmentId, GuildId};
 
 use crate::queue_entry::QueueEntry;
+
+#[inline]
+fn attachment_key(&att_id: AttachmentId) -> &str {
+    format!("attch:{:x}", att_id.as_u64()).as_ref()
+}
 
 trait RocksDbKey {
     fn to_db_key(&self) -> &str;
@@ -9,19 +14,19 @@ trait RocksDbKey {
 
 impl RocksDbKey for GuildId {
     pub fn to_db_key(&self) -> &str {
-        format!("guild({:x})", self.0).as_ref()
+        format!("guild({:x})", self.as_u64()).as_ref()
     }
 }
 
 impl RocksDbKey for QueueEntry {
     pub fn to_db_key(&self) -> &str {
-        format!("attch:{:x}", self.att_id.as_u64()).as_ref()
+        attachment_key(self.att_id)
     }
 }
 
 impl RocksDbKey for Attachment {
-    pub(crate) fn to_db_key(&self) -> &str {
-        format!("attch:{:x}", self.att_id.as_u64()).as_ref()
+    pub fn to_db_key(&self) -> &str {
+        attachment_key(self.att_id)
     }
 }
 
