@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
-
 use std::{collections::HashSet, env, sync::Arc, thread};
 use std::collections::VecDeque;
 use std::fs;
@@ -33,6 +30,7 @@ use tracing_subscriber::{
 use db::WRocksDb;
 use processing_queue::ProcessingQueue;
 
+use crate::db::BotStorage;
 use crate::queue_entry::QueueEntry;
 use crate::reactions::{clock_reaction, magnet_reaction};
 
@@ -43,6 +41,8 @@ mod queue_entry;
 mod reactions;
 mod uploader;
 mod helpers;
+mod upload;
+mod ver;
 
 // mod commands;
 
@@ -58,14 +58,6 @@ impl TypeMapKey for ShardManagerContainer {
     type Value = Arc<Mutex<ShardManager>>;
 }
 
-impl TypeMapKey for WRocksDb {
-    type Value = Arc<Mutex<rocksdb::DB>>;
-}
-
-impl TypeMapKey for ProcessingQueue {
-    type Value = Arc<RwLock<VecDeque<QueueEntry>>>;
-}
-
 struct Handler;
 
 #[async_trait]
@@ -74,7 +66,7 @@ impl EventHandler for Handler {
         handlers::cache_ready::handle(self, ctx, guilds).await;
     }
 
-    async fn guild_create(&self, _ctx: Context, guild: Guild, is_new: bool) {
+    async fn guild_create(&self, ctx: Context, guild: Guild, is_new: bool) {
         handlers::guild_create::handle(self, ctx, guild, is_new).await;
     }
 
@@ -105,19 +97,21 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
-    let token = env::var("DISCORD_TOKEN")
+    let discord_token = env::var("DISCORD_TOKEN")
         .expect("Expected a token in the environ");
 
-    if false {
-        let _shard_count = {
-            let count = env::var("SHARD_COUNT")
-                .expect("Expected a shard count in the environ");
+    let rclone_url = env::var("RCLONE_URL")
+        .expect("Expected rclone API url in the environ");
 
-            count.parse::<u64>().expect("Expected shard count as a integer")
-        };
+    {
+        let rclone_http = upload::client::Client::new(rclone_url);
+
+        if let Err(why) = rclone_http.ping().await {
+            panic!("couldnt contact rclone api: {:?}", why);
+        }
     }
 
-    let http = Http::new_with_token(&token);
+    let http = Http::new_with_token(&discord_token);
 
     let (owners, _bot_id) = match http.get_current_application_info().await {
         Ok(info) => {
@@ -136,7 +130,7 @@ async fn main() {
             .prefix(";"));
     // .group(&GENERAL_GROUP);
 
-    let mut client = Client::builder(&token)
+    let mut client = Client::builder(&discord_token)
         .framework(framework)
         .intents(
             GatewayIntents::GUILD_MESSAGES
@@ -152,13 +146,8 @@ async fn main() {
         data.insert::<ShardManagerContainer>(client.shard_manager.clone());
     }
 
-    let path = "grrr.db";
-
     {
-        let cf_names = rocksdb::DB::list_cf(&Options::default(), path).expect("Couldn't list all CF");
-
-        let db = rocksdb::DB::open_cf(&Options::default(), path, cf_names)
-            .unwrap_or_else(|| panic!("Couldn't open db file: {}", path));
+        let mut db = BotStorage::new();
 
         let mut data = client.data.write().await;
         data.insert::<WRocksDb>(Arc::new(Mutex::new(db)));

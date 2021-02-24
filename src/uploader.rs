@@ -11,11 +11,12 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info};
 
-use crate::db::WRocksDb;
-use crate::lazy_static;
+use crate::db::{WRocksDb, BotStorage};
 use crate::processing_queue::ProcessingQueue;
 use crate::queue_entry::QueueEntry;
 use crate::reactions::{clock_reaction, magnet_reaction};
+use crate::helpers::AttachmentStatus;
+use crate::db;
 
 pub async fn process_queue(data_lock: Arc<RwLock<TypeMap>>, discord_http: Arc<Http>, rclone_http: Arc<Client>) {
     while let Some(entry) = {
@@ -29,15 +30,6 @@ pub async fn process_queue(data_lock: Arc<RwLock<TypeMap>>, discord_http: Arc<Ht
 
         queue.pop_back()
     } {
-        if false {
-            discord_http.delete_reaction(
-                entry.ch_id.0,
-                entry.msg_id.0,
-                None,
-                &clock_reaction(),
-            ).await;
-        }
-
         debug!("got attachment {}", &entry.fname);
 
         {
@@ -57,8 +49,10 @@ pub async fn process_queue(data_lock: Arc<RwLock<TypeMap>>, discord_http: Arc<Ht
     }
 }
 
-pub async fn process_file(entry: &QueueEntry, db_lock: Arc<Mutex<rocksdb::DB>>, rclone_http: Arc<Client>) {
+pub async fn process_file(entry: &QueueEntry, db_lock: Arc<Mutex<BotStorage>>, rclone_http: Arc<Client>) {
     let db = db_lock.lock().await;
+
+    db.set_attch_status(&entry.guild_id.unwrap(), &entry.att_id, AttachmentStatus::Processing);
 
     let flake = entry.url.replace("https://cdn.discordapp.com/attachments/", "");
 
@@ -77,16 +71,17 @@ pub async fn process_file(entry: &QueueEntry, db_lock: Arc<Mutex<rocksdb::DB>>, 
     rclone_http.post("http://localhost:5572/operations/copyfile")
         .json(&document)
         .send()
-        .await.unwrap();
+        .await
+        .unwrap();
 
-    db.put_cf()
+    db.set_attch_status(&entry.guild_id.unwrap(), &entry.att_id, AttachmentStatus::Processed);
 }
 
 async fn get_drive_file_path(entry: &QueueEntry) -> String {
     let mut path = String::new();
 
     if let Some(mut ch_name) = entry.ch_name.clone() {
-        ch_name.retain(cleanup_char);
+        ch_name.retain(only_utf8_simple);
 
         debug!("filtered chan name: {}", &ch_name);
 
@@ -97,7 +92,7 @@ async fn get_drive_file_path(entry: &QueueEntry) -> String {
     }
 
     let mut fname = entry.fname.clone();
-    fname.retain(cleanup_char);
+    fname.retain(only_utf8_simple);
     let fname = format!("{}_{}", &entry.att_id, &fname);
 
     path.push_str(&fname);
@@ -105,6 +100,7 @@ async fn get_drive_file_path(entry: &QueueEntry) -> String {
     path
 }
 
-fn cleanup_char(c: char) -> bool {
+#[inline]
+fn only_utf8_simple(c: char) -> bool {
     char::is_alphabetic(c) || char::is_digit(c, 10) || ", ()-[]{};?".contains(c)
 }

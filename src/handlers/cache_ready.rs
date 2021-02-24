@@ -45,16 +45,5 @@ pub async fn handle(_: &impl EventHandler, ctx: Context, guilds: Vec<GuildId>) {
 
     let mut db = db_lock.lock().await;
 
-    for guild in guilds {
-        let cf_name = guild.to_db_key();
-        // Missing/new/not loaded previously
-        if db.cf_handle(cf_name).is_none() {
-            match db.create_cf(&cf_name, &Options::default()) {
-                Err(why) => error!("failed to create CF '{}' - reason: {:?}", cf_name, why),
-                Ok(_) => debug!("created CF '{}'", cf_name)
-            };
-        } else {
-            debug!("skipped creating live CF '{}'", cf_name);
-        }
-    }
+    db.create_guild_ns_missing(guilds);
 }

@@ -27,11 +27,11 @@ use tracing_subscriber::{
 };
 
 use crate::db::WRocksDb;
+use crate::helpers::AttachmentStatus;
 use crate::processing_queue::ProcessingQueue;
 use crate::queue_entry::QueueEntry;
 use crate::reactions::clock_reaction;
 use crate::UploadNotif;
-use crate::helpers::AttachmentStatus;
 
 pub async fn handle(_: &impl EventHandler, ctx: Context, msg: Message) {
     if !msg.is_private() && !msg.attachments.is_empty() {
@@ -48,50 +48,37 @@ pub async fn handle(_: &impl EventHandler, ctx: Context, msg: Message) {
         let guild_id = msg.guild_id.unwrap();
 
         for att in &msg.attachments {
+            let queue_lock = {
+                let reader = ctx.data.read().await;
+
+                reader.get::<ProcessingQueue>().expect("ProcessingQueue instance gone").clone()
+            };
+
+            let mut queue = queue_lock.write().await;
+
+            let guild_chan = {
+                let ch = msg.channel(ctx.cache.clone()).await;
+
+                if let Some(ch) = ch {
+                    ch.guild()
+                } else {
+                    None
+                }
+            };
+
+            if guild_chan.is_some() {
+                debug!("got guild 2")
+            } else {
+                debug!("guild missing");
+            }
+
+            queue.push_back(QueueEntry::from_gateway(&msg, att.clone(), guild_chan));
+
+            debug!("added {} to queue", att.url);
+
             // Store, that attachment(s) has been added to processing queue
             {
-                db.put_cf(
-                    db.cf_handle(guild_id.to_db_key()).unwrap(),
-                    att.to_db_key(),
-                    AttachmentStatus::Pending,
-                );
-
-                debug!("added {} to db with status pending", att.url);
-            }
-
-            // Push mini notification to queue, so another process can take it
-            {
-                let queue_lock = {
-                    let reader = ctx.data.read().await;
-
-                    reader.get::<ProcessingQueue>().expect("ProcessingQueue instance gone").clone()
-                };
-
-                let mut queue = queue_lock.write().await;
-
-                let guild_chan = {
-                    match msg.channel(ctx.cache.clone()).await {
-                        Some(chan) => {
-                            debug!("got guild 1");
-                            chan.guild()
-                        }
-                        _ => None,
-                    }
-                };
-
-                if guild_chan.is_some() {
-                    debug!("got guild 2")
-                } else {
-                    debug!("guild missing");
-                }
-
-                queue.push_back(QueueEntry::from_gateway(&msg, att.clone(), guild_chan));
-
-                debug!("added {} to queue", att.url);
-            }
-
-            if false {
-                msg.react(ctx.http.clone(), clock_reaction()).await;
+                db.set_attch_status(&guild_id, &att.id, AttachmentStatus::Pending);
             }
         }
 
