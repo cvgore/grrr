@@ -9,7 +9,7 @@ use tracing::field::debug;
 
 use crate::helpers::AttachmentStatus;
 use tracing::{debug, error};
-use crate::helpers;
+use crate::helpers::RocksDbKey;
 
 pub struct WRocksDb;
 
@@ -43,20 +43,20 @@ impl BotStorage {
             let cf_name = guild.to_db_key();
 
             // Missing/new/not loaded previously
-            if self.db.cf_handle(cf_name).is_none() {
+            if self.db.cf_handle(&cf_name).is_none() {
                 match self.db.create_cf(&cf_name, &Options::default()) {
-                    Err(why) => error!("failed to create guild NS '{}' - reason: {:?}", cf_name, why),
-                    Ok(_) => debug!("created guild NS '{}'", cf_name)
+                    Err(why) => error!("failed to create guild NS '{}' - reason: {:?}", &cf_name, why),
+                    Ok(_) => debug!("created guild NS '{}'", &cf_name)
                 };
             } else {
-                debug!("skipped creating live guild NS '{}'", cf_name);
+                debug!("skipped creating live guild NS '{}'", &cf_name);
             }
         }
     }
 
     pub fn set_attch_status(&self, guild_id: &GuildId, att: &AttachmentId, status: AttachmentStatus) {
         self.db.put_cf(
-            self.db.cf_handle(guild_id.to_db_key()).unwrap(),
+            self.db.cf_handle(&guild_id.to_db_key()).unwrap(),
             att.to_db_key(),
             status,
         );

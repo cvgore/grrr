@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 
-use regex::Regex;
 use reqwest::Client;
 use serde_json::json;
 use serenity::http::Http;
@@ -60,19 +59,21 @@ pub async fn process_file(entry: &QueueEntry, db_lock: Arc<Mutex<BotStorage>>, r
 
     debug!("discord flake: {}", flake);
     debug!("drive file name: {}", drive_file_name);
-    debug!("discord channel name: {}", entry.ch_name.clone().unwrap_or_else(|| "#NULL".to_string()));
+    debug!("discord channel name: {}", entry.ch_name.clone().unwrap_or_else(|| "#NULL"));
 
-    let mut document = HashMap::new();
-    document.insert("srcFs", "discord:");
-    document.insert("srcRemote", &flake);
-    document.insert("dstFs", "gdrive:");
-    document.insert("dstRemote", &drive_file_name);
+    {
+        let mut document = HashMap::new();
+        document.insert("srcFs", "discord:");
+        document.insert("srcRemote", &flake);
+        document.insert("dstFs", "gdrive:");
+        document.insert("dstRemote", &drive_file_name);
 
-    rclone_http.post("http://localhost:5572/operations/copyfile")
-        .json(&document)
-        .send()
-        .await
-        .unwrap();
+        rclone_http.post("http://localhost:5572/operations/copyfile")
+            .json(&document)
+            .send()
+            .await
+            .unwrap();
+    }
 
     db.set_attch_status(&entry.guild_id.unwrap(), &entry.att_id, AttachmentStatus::Processed);
 }
@@ -102,5 +103,5 @@ async fn get_drive_file_path(entry: &QueueEntry) -> String {
 
 #[inline]
 fn only_utf8_simple(c: char) -> bool {
-    char::is_alphabetic(c) || char::is_digit(c, 10) || ", ()-[]{};?".contains(c)
+    char::is_alphabetic(c) || char::is_digit(c, 10) || ", ()-[]{};.?".contains(c)
 }

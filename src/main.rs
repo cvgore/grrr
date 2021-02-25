@@ -33,6 +33,7 @@ use processing_queue::ProcessingQueue;
 use crate::db::BotStorage;
 use crate::queue_entry::QueueEntry;
 use crate::reactions::{clock_reaction, magnet_reaction};
+use serenity::model::gateway::Activity;
 
 mod handlers;
 mod db;
@@ -74,7 +75,9 @@ impl EventHandler for Handler {
         handlers::message::handle(self, ctx, msg).await;
     }
 
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
+        ctx.set_activity(Activity::listening("for files to backup")).await;
+
         info!("Connected as {}, accessing {} guild(s)", ready.user.name, ready.guilds.len());
     }
 
