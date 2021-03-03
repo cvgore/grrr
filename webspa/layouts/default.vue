@@ -61,12 +61,12 @@ export default {
         {
           title: 'Configure',
           icon: 'wrench',
-          to: { name: 'inspire' }
+          to: { name: 'configure' }
         },
         {
           title: 'Logout',
           icon: 'door-open',
-          to: { name: 'index' }
+          to: { name: 'logout' }
         }
       ]
     }
