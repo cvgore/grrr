@@ -10,6 +10,7 @@ use tracing::field::debug;
 use crate::helpers::AttachmentStatus;
 use tracing::{debug, error};
 use crate::helpers::RocksDbKey;
+use crate::configurator::config::ServiceConfig;
 
 pub struct WRocksDb;
 
@@ -60,5 +61,20 @@ impl BotStorage {
             att.to_db_key(),
             status,
         );
+    }
+
+    pub fn get_config(&self, guild_id: &GuildId) -> Result<ServiceConfig, ()> {
+        let maybe_cfg = self.db.get_cf(
+            self.db.cf_handle(&guild_id.to_db_key()).unwrap(),
+            "config"
+        );
+
+        if let Ok(Some(maybe_cfg)) = maybe_cfg {
+            let cfg_str = String::from_utf8(maybe_cfg).expect("invalid string");
+
+            Ok(serde_json::from_str::<ServiceConfig>(&cfg_str).expect("invalid json"))
+        } else {
+            Err(())
+        }
     }
 }

@@ -44,6 +44,10 @@ mod uploader;
 mod helpers;
 mod upload;
 mod ver;
+mod commands;
+mod configurator;
+
+use commands::configurator::*;
 
 // mod commands;
 
@@ -86,9 +90,9 @@ impl EventHandler for Handler {
     }
 }
 
-// #[group]
-// #[commands(multiply, ping, quit)]
-// struct General;
+#[group("general")]
+#[commands(configure)]
+struct General;
 
 #[tokio::main]
 async fn main() {
@@ -130,8 +134,8 @@ async fn main() {
     let framework = StandardFramework::new()
         .configure(|c| c
             .owners(owners)
-            .prefix(";"));
-    // .group(&GENERAL_GROUP);
+            .prefix("&"))
+    .group(&GENERAL_GROUP);
 
     let mut client = Client::builder(&discord_token)
         .framework(framework)

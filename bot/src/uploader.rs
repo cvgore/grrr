@@ -59,7 +59,7 @@ pub async fn process_file(entry: &QueueEntry, db_lock: Arc<Mutex<BotStorage>>, r
 
     debug!("discord flake: {}", flake);
     debug!("drive file name: {}", drive_file_name);
-    debug!("discord channel name: {}", entry.ch_name.clone().unwrap_or_else(|| "#NULL"));
+    debug!("discord channel name: {}", entry.ch_name.clone().unwrap_or_else(|| "#NULL".to_string()));
 
     {
         let mut document = HashMap::new();

@@ -2,6 +2,11 @@ use serenity::model::channel::Attachment;
 use serenity::model::id::{AttachmentId, GuildId};
 
 use crate::queue_entry::QueueEntry;
+use serenity::prelude::Context;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use crate::db::{BotStorage, WRocksDb};
+use serenity::async_trait;
 
 #[inline]
 fn attachment_key(att_id: &AttachmentId) -> String {
@@ -10,6 +15,20 @@ fn attachment_key(att_id: &AttachmentId) -> String {
 
 pub trait RocksDbKey {
     fn to_db_key(&self) -> String;
+}
+
+#[async_trait]
+pub trait ContextHelpers {
+    async fn get_db(&self) -> Arc<Mutex<BotStorage>>;
+}
+
+#[async_trait]
+impl ContextHelpers for Context {
+    async fn get_db(&self) -> Arc<Mutex<BotStorage>> {
+        let data_lock = self.data.read().await;
+
+        data_lock.get::<WRocksDb>().expect("db instance gone").clone()
+    }
 }
 
 impl RocksDbKey for GuildId {

@@ -1,0 +1,3 @@
+[discord]
+type = http
+url = https://cdn.discordapp.com/attachments/

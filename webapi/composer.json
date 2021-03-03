@@ -1,0 +1,19 @@
+{
+    "name": "cvgore/grrr-web",
+    "description": "Dashboard for controlling grrr bot",
+    "type": "project",
+    "license": "GPL-2.0-only",
+    "authors": [
+        {
+            "name": "Kacper",
+            "email": "kacper@cvgo.re"
+        }
+    ],
+    "require": {
+        "leocavalcante/siler": "^1.7",
+        "twig/twig": "^3.3"
+    },
+    "require-dev": {
+        "roave/security-advisories": "dev-master"
+    }
+}

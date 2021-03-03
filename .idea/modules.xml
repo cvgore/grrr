@@ -2,7 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/grrr.iml" filepath="$PROJECT_DIR$/grrr.iml" />
+      <module fileurl="file://$PROJECT_DIR$/bot/bot.iml" filepath="$PROJECT_DIR$/bot/bot.iml" />
+      <module fileurl="file://$PROJECT_DIR$/webapi/webapi.iml" filepath="$PROJECT_DIR$/webapi/webapi.iml" />
+      <module fileurl="file://$PROJECT_DIR$/webspa/webspa.iml" filepath="$PROJECT_DIR$/webspa/webspa.iml" />
     </modules>
   </component>
 </project>
