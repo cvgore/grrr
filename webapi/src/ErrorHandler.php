@@ -3,17 +3,40 @@
 namespace App;
 
 use App\Guards\AccessDeniedException;
-use League\BooBoo\Handler\HandlerInterface;
 use Siler\Http\Response;
+use Throwable;
+use Whoops\Handler\Handler;
 
-class ErrorHandler implements HandlerInterface
+class ErrorHandler extends Handler
 {
-    public function handle($e)
+    public function handle(): ?int
     {
-        if ($e instanceof AccessDeniedException) {
-            Response\json([
-                'error' => 'Unauthorized'
-            ], 401);
+        $ex = $this->getException();
+
+        if (!$this->handleException($ex)) {
+            return Handler::DONE;
         }
+
+        $this->getRun()->sendHttpCode(false);
+
+        return Handler::QUIT;
+    }
+
+    /**
+     * @param \Throwable $ex
+     *
+     * @return bool if error was handled, otherwise false
+     */
+    protected function handleException(Throwable $ex): bool
+    {
+        if ($ex instanceof AccessDeniedException) {
+            Response\json([
+                'error' => 'Unauthorized',
+            ], 401);
+
+            return true;
+        }
+
+        return false;
     }
 }

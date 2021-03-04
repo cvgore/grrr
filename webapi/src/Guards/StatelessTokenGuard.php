@@ -4,7 +4,6 @@ namespace App\Guards;
 
 use App\Core\Env;
 use Siler\Http\Request;
-use function Siler\Str\starts_with;
 
 class StatelessTokenGuard implements Guard
 {
@@ -44,8 +43,6 @@ class StatelessTokenGuard implements Guard
 
         $token = substr($auth, $this->tokenPrefixLen);
 
-
-
         $decoded = base64_decode($token, true);
 
         if (! $decoded) {
@@ -65,16 +62,16 @@ class StatelessTokenGuard implements Guard
         [
             'guild' => $guildId,
             'timestamp' => $validUntil,
-            'checksum' => $checksum
+            'checksum' => $checksum,
         ] = $matches;
 
-        if (time() >= ($validUntil - Env::getSecret())) {
+        if (time() >= ($validUntil - Env::getTokenTime())) {
             throw new AccessDeniedException("token expired");
         }
 
         $givenHash = hash_hmac('sha1', "{$guildId},{$validUntil}", Env::getSecret());
 
-        if (!hash_equals($checksum, $givenHash)) {
+        if (! hash_equals($checksum, $givenHash)) {
             throw new AccessDeniedException("invalid hmac");
         }
     }

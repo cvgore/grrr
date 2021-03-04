@@ -14,9 +14,7 @@ use function App\Functional\lcallm;
 Env::start();
 Env::loadConfig();
 
-Route\get('/{guildId}/configure', lcallm([ConfigureController::class, 'get']));
-
-Route\get('/', lcallm([DefaultController::class, 'index']));
+Route\get('/configure', lcallm([ConfigureController::class, 'get']));
 
 if (! Route\did_match()) {
     L\call([new DefaultController, 'index']);

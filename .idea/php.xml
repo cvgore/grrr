@@ -6,7 +6,7 @@
       <path value="$PROJECT_DIR$/webapi/vendor/leocavalcante/siler" />
       <path value="$PROJECT_DIR$/webapi/vendor/psr/log" />
       <path value="$PROJECT_DIR$/webapi/vendor/monolog/monolog" />
-      <path value="$PROJECT_DIR$/webapi/vendor/league/booboo" />
+      <path value="$PROJECT_DIR$/webapi/vendor/filp/whoops" />
     </include_path>
   </component>
   <component name="PhpProjectSharedConfiguration" php_language_level="7.4" />

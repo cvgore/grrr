@@ -2,8 +2,6 @@
 
 namespace App\Core;
 
-use Siler\Http\Response;
-
 class Env
 {
     private static array $env = [];
@@ -12,9 +10,7 @@ class Env
     public static function start(): void
     {
         if (! file_exists(self::ENV_PATH)) {
-            Response\json(['error' => 'missing env file']);
-
-            die;
+            throw new EnvFileMissingException;
         }
 
         //  Load file with environmental vars
@@ -40,5 +36,10 @@ class Env
     public static function getTokenTime(): int
     {
         return self::$env['token_time'];
+    }
+
+    public static function getRcloneConfigPath(): string
+    {
+        return self::$env['rclone_config_path'];
     }
 }

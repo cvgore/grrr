@@ -9,6 +9,6 @@ class DefaultController
 {
     public function index(): void
     {
-        Response\text('Grrr Web API');
+        Response\json(['app' =>'Grrr web API']);
     }
 }
